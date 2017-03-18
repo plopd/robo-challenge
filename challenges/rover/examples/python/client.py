@@ -20,24 +20,22 @@ class Point:
 
 class Logic:
     def __init__(self, max_stat_count=0, stat_err=0, fact_step=5):
-        # self.found = list()
-        # self.bad = list()
         self.available = list()                      # List of all unotuched pos pts
-        self.max_stat_count = max_stat_count
-        self.robot = None                          # Current position of the robot
-        self.rob_angle = 0
-        self.stat_count = max_stat_count
-        self.stat_err = stat_err
-        self.angle_err = 0
-        self.target = None
-        self.init_dist = 0
-        self.factor_step = fact_step
+        self.max_stat_count = max_stat_count         # if after max_stat_count the position did nto change, im stationary.
+        self.stat_count = max_stat_count             # current_counter for finding stationary
+        self.robot = None                            # Point of current position of robot.
+        self.rob_angle = 0                           # Absolute orientation of robot in radians.
+
+        self.stat_err = stat_err                     # tolerance for stationary, if its below this you increment stat_count.
+        self.angle_err = 0                           # if difference target rotation and current rotation is (-eps, eps) then dont turn.
+        self.target = None                           # Point as the target where robot wants to move.
+        self.factor_step = fact_step                 # figure it out with initial calibration. If you have a target dist d you multiply it by this factor to make up for the noise in the real robot.
 
     def update(self, data):
         robo = Point(data['robot']['x'], data['robot']['y'])
         ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] > 0]
         # print (robo.x, robo.y)
-        if self.robot:
+        if self.robot: #if its not the first update.
             stat = self.stationary(robo)
             self.rob_angle = math.atan2(robo.y - self.robot.y, robo.x - self.robot.x)
         else:
@@ -52,6 +50,8 @@ class Logic:
         if (len(ava) < len(self.available)) or self.stat_count >= self.max_stat_count: # found or stopped
             self.available = ava
             p = self.find_closest()
+            stop()
+            # TODO: move a little to find your orientation
             self.move(p)
         else:
         # elif self.target and Point.dist(self.robot, self.target) > self.init_dist:
@@ -71,10 +71,10 @@ class Logic:
 
         self.target = p
         d_trans = Point.dist(self.robot, p)
-        self.init_dist = d_trans
+        self.init_dist = d_trans #
         d_rot = math.atan2(p.y - self.robot.y, p.x - self.robot.x) - self.rob_angle
         d_rot_deg = math.degrees(d_rot) % 360
-        print("robangle", self.rob_angle)
+        print("robangle", self.rob_angle,"rad ",  math.degrees(self.rob_angle),"deg")
         print ("rot_degree", d_rot_deg)
         if d_rot_deg > 180:
             d_rot_deg = -360+d_rot_deg
@@ -153,15 +153,18 @@ def turn(angle, err=0):
     elif angle > err:
         client.publish('robot/process', json.dumps({"command": "left", "args": angle }))
 
+def stop():
+    client.publish('robot/process', json.dumps({"command": "stop"}))
+
 def move(c, g):
     d_trans = math.sqrt((g['x']-c['x'])**2 + (g['y']-c['y'])**2)
     d_rot = math.atan2(g['y'] - c['y'], g['x'] - c['x']) - c['theta']
     d_rot_deg = math.degrees(d_rot)
-    
+
     turn(int(d_rot_deg))
     move_forward(int(d_trans*10))
-    return c['theta'] + d_rot
-    
+    #return c['theta'] + d_rot
+
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
