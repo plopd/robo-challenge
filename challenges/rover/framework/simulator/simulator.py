@@ -1,12 +1,20 @@
 # -*- coding: utf-8 -*-
 import math
 import common
+import numpy as np
 
 MAX_DIST = 5000
 MIN_DIST = 0
 MAX_ANGLE = 360
 MIN_ANGLE = 0
+VAR_TRANS = 20
+VAR_ANGLE = 10
 
+def gauss_noise(var):
+    _sum = 0.0
+    for _ in range(12):
+        _sum += np.random.uniform(-var, var)
+    return 0.5 * _sum
 
 class Simulator:
     """
@@ -56,8 +64,9 @@ class Simulator:
         y = math.sin(math.radians(self.__angle)) * distance / self.POSITION_FACTOR
         self.__x += x
         self.__y += y
-        self.__left_distance += distance
-        self.__right_distance += distance
+	noisy_distance = distance + gauss_noise(VAR_TRANS)
+        self.__left_distance += noisy_distance
+        self.__right_distance += noisy_distance
 
     @common.check_int
     @common.max(MAX_DIST)
@@ -72,8 +81,9 @@ class Simulator:
         y = math.sin(math.radians(self.__angle)) * distance / self.POSITION_FACTOR
         self.__x -= x
         self.__y -= y
-        self.__left_distance -= distance
-        self.__right_distance -= distance
+	noisy_distance = distance + gauss_noise(VAR_TRANS)
+        self.__left_distance -= noisy_distance
+        self.__right_distance -= noisy_distance
 
     @common.check_int
     @common.max(MAX_ANGLE)
@@ -84,8 +94,8 @@ class Simulator:
         :param angle: the angle in degrees.
         :return: None
         """
-        self.__angle -= angle
-        distance = self.calc_distance_with_angle(angle)
+        self.__angle -= angle + gauss_noise(VAR_ANGLE)
+        distance = self.calc_distance_with_angle(angle) 
         self.__right_distance -= distance
         self.__left_distance += distance
 
@@ -98,8 +108,8 @@ class Simulator:
         :param angle: the angle in degrees.
         :return: None
         """
-        self.__angle += angle
-        distance = self.calc_distance_with_angle(angle)
+        self.__angle += angle + gauss_noise(VAR_ANGLE)
+        distance = self.calc_distance_with_angle(angle) 
         self.__right_distance += distance
         self.__left_distance -= distance
 
