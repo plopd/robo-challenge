@@ -28,6 +28,8 @@ def on_message(client, userdata, msg):
     if 'incoming' in msg.topic:
         print(obj)
         client.publish('players/' + PLAYER_NAME, json.dumps({"command": "start"}))
+    elif 'game' in msg.topic:
+        print(obj)
 
     # TODO: implement algorithm
 
