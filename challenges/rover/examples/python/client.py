@@ -1,11 +1,10 @@
 import paho.mqtt.client as mqtt
 import json
+import math
 
 SERVER = "127.0.0.1"
 PORT = 1883
-
 PLAYER_NAME = "foo"
-
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -37,13 +36,19 @@ def move_forward(dist):
 def move_backward(dist):
     pass
 
-def turn_left(angle):
+def turn_left(angle):    
     pass
 
 def turn_right(angle):
     pass
 
-
+def move(c, g):
+    d_trans = math.sqrt((g['x']-c['x'])**2 + (g['y']-c['y'])**2)
+    d_rot = math.tan2(g['y'] - c['y'], g['x'] - c['x']) - c['theta']
+    turn(d_rot)
+    move_forward(d_trans)
+    return c['theta'] + d_rot
+    
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
