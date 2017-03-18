@@ -19,7 +19,7 @@ class Point:
 
 
 class Logic:
-    def __init__(self, max_stat_count=0, stat_err=0):
+    def __init__(self, max_stat_count=0, stat_err=0, fact_step=5):
         # self.found = list()
         # self.bad = list()
         self.available = list()                      # List of all unotuched pos pts
@@ -28,20 +28,21 @@ class Logic:
         self.rob_angle = 0
         self.stat_count = max_stat_count
         self.stat_err = stat_err
-        self.angle_err = 3
+        self.angle_err = 0
         self.target = None
         self.init_dist = 0
+        self.factor_step = fact_step
 
     def update(self, data):
         robo = Point(data['robot']['x'], data['robot']['y'])
         ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] > 0]
-        print (robo.x, robo.y)
+        # print (robo.x, robo.y)
         if self.robot:
             stat = self.stationary(robo)
+            self.rob_angle = math.atan2(robo.y - self.robot.y, robo.x - self.robot.x)
         else:
             stat = True
             self.available = ava
-            self.rob_angle = data['robot']['r']
         self.robot = robo
 
         if stat:
@@ -49,11 +50,13 @@ class Logic:
         else:
             self.stat_count = 0
         if (len(ava) < len(self.available)) or self.stat_count >= self.max_stat_count: # found or stopped
+            self.available = ava
             p = self.find_closest()
             self.move(p)
+        else:
         # elif self.target and Point.dist(self.robot, self.target) > self.init_dist:
         #     self.move(self.target)
-        self.available = ava
+            self.available = ava
 
     def stationary(self, p):
         if abs(p.x-self.robot.x) > self.stat_err or abs(p.y-self.robot.y) > self.stat_err:
@@ -62,18 +65,24 @@ class Logic:
             return True
 
     def move(self, p):
-        # move(self.robot.to_dict(), p.to_dict())
-        print("move", p.x, p.y)
+        print("MOVE")
+        print("robot", self.robot.x, self.robot.y)
+        print("target", p.x, p.y)
+
         self.target = p
         d_trans = Point.dist(self.robot, p)
         self.init_dist = d_trans
         d_rot = math.atan2(p.y - self.robot.y, p.x - self.robot.x) - self.rob_angle
-        d_rot_deg = math.degrees(d_rot)
+        d_rot_deg = math.degrees(d_rot) % 360
+        print("robangle", self.rob_angle)
+        print ("rot_degree", d_rot_deg)
+        if d_rot_deg > 180:
+            d_rot_deg = -360+d_rot_deg
 
+        # print ('rad-ang ', d_rot)
         turn(int(d_rot_deg), self.angle_err)
-        move_forward(int(d_trans*5))
-        self.rob_angle += d_rot
-        self.rob_angle %= 360
+        move_forward(int(d_trans*self.factor_step))
+        # self.rob_angle += d_rot
 
     def find_closest(self):
         mind = 2**31
@@ -109,7 +118,7 @@ cur = dict()
 cur['theta'] = 0
 moving = False
 
-logic = Logic(5)
+logic = Logic(5, fact_step=8)
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
@@ -121,6 +130,7 @@ def on_message(client, userdata, msg):
     if 'incoming' in msg.topic:
         print(obj)
         client.publish('players/' + PLAYER_NAME, json.dumps({"command": "start"}))
+        logic.rob_angle=0
     elif 'game' in msg.topic and not moving:
         # cur['x'] = obj['robot']['x']
         # cur['y'] = obj['robot']['x']
