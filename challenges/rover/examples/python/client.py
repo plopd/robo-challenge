@@ -7,6 +7,7 @@ PORT = 1883
 PLAYER_NAME = "foo"
 
 
+
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code " + str(rc))
@@ -32,16 +33,16 @@ def on_message(client, userdata, msg):
     # TODO: implement algorithm
 
 def move_forward(dist):
-    pass
+    client.publish('robot/process', json.dumps({"command": "forward", "args": dist}))
 
 def move_backward(dist):
-    pass
+    client.publish('robot/process', json.dumps({"command": "backward", "args": dist}))
 
-def turn_left(angle):
-    pass
-
-def turn_right(angle):
-    pass
+def turn(angle):
+    if angle >= 0:
+        client.publish('robot/process', json.dumps({"command": "right", "args": angle}))
+    else:
+        client.publish('robot/process', json.dumps({"command": "left", "args": angle}))
 
 
 client = mqtt.Client()
