@@ -1,7 +1,6 @@
 import paho.mqtt.client as mqtt
 import json
 import math
-from queue import Queue
 # from game_logic import Logic
 
 
@@ -20,54 +19,52 @@ class Point:
 
 
 class Logic:
-    def __init__(self, hist_size=10):
+    def __init__(self, max_stat_count=0, stat_err=0):
         # self.found = list()
         # self.bad = list()
         self.available = list()                      # List of all unotuched pos pts
-        self.hist_size = hist_size                 # int, no. op history pos
-        self.history = Queue(self.hist_size)       # stores history positions of the robot
+        self.max_stat_count = max_stat_count
         self.robot = None                          # Current position of the robot
         self.rob_angle = 0
-        self.start_pos = None
+        self.stat_count = max_stat_count
+        self.stat_err = stat_err
 
     def update(self, data):
-        # print('bla')
-        # print (data)
         robo = Point(data['robot']['x'], data['robot']['y'])
         ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] > 0]
-        # found = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] and p['score'] == 1]
+        print (robo.x, robo.y)
+        if self.robot:
+            stat = self.stationary(robo)
+        else:
+            stat = True
+            self.available = ava
 
-        if self.history.full():
-            self.history.get()
-        self.history.put(robo)
-        self.robot = robo         # Cur
-        print (self.history.qsize(), "robot", self.robot.x, self.robot.y)
-        print ("stationary", self.is_stationary())
-        print ("found ", len(self.available) - len(ava))
-
-        if self.history.full() and ((len(ava) < len(self.available)) or self.is_stationary(0)): # found or stopped
+        if stat:
+            self.stat_count += 1
+        else:
+            self.stat_count = 0
+        self.robot = robo
+        if (len(ava) < len(self.available)) or self.stat_count >= self.max_stat_count: # found or stopped
             p = self.find_closest()
-            self.history = Queue(self.hist_size)
             self.move(p)
         self.available = ava
 
-    def is_stationary(self, error=0):
-        for p in list(self.history.queue):
-            if abs(p.x-self.robot.x) > error or abs(p.y-self.robot.y) > error:
-                return False
-        return True
+    def stationary(self, p):
+        if abs(p.x-self.robot.x) > self.stat_err or abs(p.y-self.robot.y) > self.stat_err:
+            return False
+        else:
+            return True
 
     def move(self, p):
-        self.start_pos = self.robot
-        print ("moving ")
-        print (p.x, p.y)
         # move(self.robot.to_dict(), p.to_dict())
+        print("move", p.x, p.y)
+
         d_trans = Point.dist(self.robot, p)
         d_rot = math.atan2(p.y - self.robot.y, p.x - self.robot.x) - self.rob_angle
         d_rot_deg = math.degrees(d_rot)
 
         turn(int(d_rot_deg))
-        move_forward(int(d_trans))
+        move_forward(int(d_trans*10))
         self.rob_angle += d_rot
 
     def find_closest(self):
@@ -120,25 +117,26 @@ def on_message(client, userdata, msg):
     elif 'game' in msg.topic and not moving:
         # cur['x'] = obj['robot']['x']
         # cur['y'] = obj['robot']['x']
-        # move(cur, {'x':700, 'y':600})
+        # move(cur, {'x':400, 'y':400})
         # moving = True
         if 'robot' in obj:
             logic.update(obj)
-        
+        #
 def move_forward(dist):
-    print("move for")
+    print("dist ", dist)
     client.publish('robot/process', json.dumps({"command": "forward", "args": dist}))
 
 def move_backward(dist):
     client.publish('robot/process', json.dumps({"command": "backward", "args": dist}))
 
 def turn(angle):
-    if angle >= 0:
-        print("pos ang")
+    print("angle ", angle)
+    if angle > 0:
+        # print("pos ang")
         client.publish('robot/process', json.dumps({"command": "right", "args": angle}))
-    else:
-        print("neg ang")
-        client.publish('robot/process', json.dumps({"command": "left", "args": 360 + angle }))
+    elif angle < 0:
+        # print("neg ang")
+        client.publish('robot/process', json.dumps({"command": "left", "args": 360-angle }))
 
 def move(c, g):
     d_trans = math.sqrt((g['x']-c['x'])**2 + (g['y']-c['y'])**2)
