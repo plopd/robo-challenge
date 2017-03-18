@@ -15,13 +15,19 @@ def on_connect(client, userdata, flags, rc):
     # reconnect then subscriptions will be renewed.
     client.subscribe('players/' + PLAYER_NAME + '/#')
     client.subscribe('robot/state')
+    client.publish('players/' + PLAYER_NAME, json.dumps({"command": "register"}))
+    client.subscribe('players/' + PLAYER_NAME + '/incoming')
 
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-    print(msg.topic)
+    # print(msg.topic)
     obj = json.loads(msg.payload.decode("utf-8"))
-    print(obj)
+    # print(obj)
+
+    if 'incoming' in msg.topic:
+        print(obj)
+        client.publish('players/' + PLAYER_NAME, json.dumps({"command": "start"}))
 
     # TODO: implement algorithm
 
