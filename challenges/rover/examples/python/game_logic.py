@@ -21,23 +21,20 @@ class Logic:
         self.history = Queue(self.hist_size)
         self.robot = None
 
-
-
     def update(self, data):
-        if len(self.history) == self.hist_size:
-            robo =  Point(data['robot']['x'], data['robot']['y'])
-            ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] == 1]
-            # found = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] and p['score'] == 1]
-            self.history.put(robo)
-            self.robot = robo
+        robo = Point(data['robot']['x'], data['robot']['y'])
+        ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] == 1]
+        # found = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] and p['score'] == 1]
+        if self.history.full():
+            self.history.get()
+        self.history.put(robo)
+        self.robot = robo
 
-            if (len(ava) < len(self.available)) or self.is_stationary(2): # found or stopped
-                p = self.find_closest()
-                self.history = Queue(self.hist_size)
-                self.available = ava
-                self.move(p)
-
-
+        if self.history.full() and ((len(ava) < len(self.available)) or self.is_stationary(2)): # found or stopped
+            p = self.find_closest()
+            self.history = Queue(self.hist_size)
+            self.available = ava
+            self.move(p)
 
     def is_stationary(self, error=0):
         for p in list(self.history):
@@ -45,7 +42,7 @@ class Logic:
                 return False
         return True
 
-    def move(self, x, y):
+    def move(self, p):
         pass
 
     def find_closest(self):
