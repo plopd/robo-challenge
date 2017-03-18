@@ -28,6 +28,9 @@ class Logic:
         self.rob_angle = 0
         self.stat_count = max_stat_count
         self.stat_err = stat_err
+        self.angle_err = 3
+        self.target = None
+        self.init_dist = 0
 
     def update(self, data):
         robo = Point(data['robot']['x'], data['robot']['y'])
@@ -38,15 +41,18 @@ class Logic:
         else:
             stat = True
             self.available = ava
+            self.rob_angle = data['robot']['r']
+        self.robot = robo
 
         if stat:
             self.stat_count += 1
         else:
             self.stat_count = 0
-        self.robot = robo
         if (len(ava) < len(self.available)) or self.stat_count >= self.max_stat_count: # found or stopped
             p = self.find_closest()
             self.move(p)
+        # elif self.target and Point.dist(self.robot, self.target) > self.init_dist:
+        #     self.move(self.target)
         self.available = ava
 
     def stationary(self, p):
@@ -58,14 +64,16 @@ class Logic:
     def move(self, p):
         # move(self.robot.to_dict(), p.to_dict())
         print("move", p.x, p.y)
-
+        self.target = p
         d_trans = Point.dist(self.robot, p)
+        self.init_dist = d_trans
         d_rot = math.atan2(p.y - self.robot.y, p.x - self.robot.x) - self.rob_angle
         d_rot_deg = math.degrees(d_rot)
 
-        turn(int(d_rot_deg))
-        move_forward(int(d_trans*10))
+        turn(int(d_rot_deg), self.angle_err)
+        move_forward(int(d_trans*5))
         self.rob_angle += d_rot
+        self.rob_angle %= 360
 
     def find_closest(self):
         mind = 2**31
@@ -76,16 +84,15 @@ class Logic:
             if d < mind:
                 mind = d
                 minp = p
-        # print ("min dist ",  mind)
         return minp
 
 
 
 
 SERVER = "127.0.0.1"
+# SERVER = "10.10.10.30"
 PORT = 1883
-PLAYER_NAME = "foo"
-
+PLAYER_NAME = "RoboHackHustlers"
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -129,14 +136,12 @@ def move_forward(dist):
 def move_backward(dist):
     client.publish('robot/process', json.dumps({"command": "backward", "args": dist}))
 
-def turn(angle):
+def turn(angle, err=0):
     print("angle ", angle)
-    if angle > 0:
-        # print("pos ang")
-        client.publish('robot/process', json.dumps({"command": "right", "args": angle}))
-    elif angle < 0:
-        # print("neg ang")
-        client.publish('robot/process', json.dumps({"command": "left", "args": 360-angle }))
+    if angle < -err:
+        client.publish('robot/process', json.dumps({"command": "right", "args": -angle}))
+    elif angle > err:
+        client.publish('robot/process', json.dumps({"command": "left", "args": angle }))
 
 def move(c, g):
     d_trans = math.sqrt((g['x']-c['x'])**2 + (g['y']-c['y'])**2)
