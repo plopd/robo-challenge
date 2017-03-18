@@ -17,9 +17,13 @@ def on_connect(client, userdata, flags, rc):
     client.publish('players/' + PLAYER_NAME, json.dumps({"command": "register"}))
     client.subscribe('players/' + PLAYER_NAME + '/incoming')
 
+cur = dict()
+cur['theta'] = 0
+moving = False
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
+    global cur, moving
     # print(msg.topic)
     obj = json.loads(msg.payload.decode("utf-8"))
     # print(obj)
@@ -27,10 +31,14 @@ def on_message(client, userdata, msg):
     if 'incoming' in msg.topic:
         print(obj)
         client.publish('players/' + PLAYER_NAME, json.dumps({"command": "start"}))
-
-    # TODO: implement algorithm
-
+    elif 'game' in msg.topic and not moving:
+        cur['x'] = obj['robot']['x']
+        cur['y'] = obj['robot']['x']
+        move(cur, {'x':700, 'y':600})
+        moving = True
+        
 def move_forward(dist):
+    print("move for")
     client.publish('robot/process', json.dumps({"command": "forward", "args": dist}))
 
 def move_backward(dist):
@@ -38,15 +46,19 @@ def move_backward(dist):
 
 def turn(angle):
     if angle >= 0:
+        print("pos ang")
         client.publish('robot/process', json.dumps({"command": "right", "args": angle}))
     else:
-        client.publish('robot/process', json.dumps({"command": "left", "args": angle}))
+        print("neg ang")
+        client.publish('robot/process', json.dumps({"command": "left", "args": 360 + angle }))
 
 def move(c, g):
     d_trans = math.sqrt((g['x']-c['x'])**2 + (g['y']-c['y'])**2)
-    d_rot = math.tan2(g['y'] - c['y'], g['x'] - c['x']) - c['theta']
-    turn(d_rot)
-    move_forward(d_trans)
+    d_rot = math.atan2(g['y'] - c['y'], g['x'] - c['x']) - c['theta']
+    d_rot_deg = math.degrees(d_rot)
+    
+    turn(int(d_rot_deg))
+    move_forward(int(d_trans*10))
     return c['theta'] + d_rot
     
 client = mqtt.Client()
