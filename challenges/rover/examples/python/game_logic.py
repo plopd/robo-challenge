@@ -1,4 +1,4 @@
-from challenges.rover.examples.python.client import move_backward, move_forward, turn_left, turn_right
+from client import move
 from queue import Queue
 import math
 
@@ -11,6 +11,9 @@ class Point:
     @staticmethod
     def dist(a, b):
         return math.sqrt((a.x-b.x)**2 + (a.y-b.Y)**2)
+
+    def to_dict(self):
+        return dict(x=self.x, y=self.y)
 
 class Logic:
     def __init__(self, hist_size=100):
@@ -43,7 +46,7 @@ class Logic:
         return True
 
     def move(self, p):
-        pass
+        move(self.robot.tp_dict(), p.to_dict())
 
     def find_closest(self):
         mind = 2**31
