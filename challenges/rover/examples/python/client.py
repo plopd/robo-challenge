@@ -1,10 +1,12 @@
 import paho.mqtt.client as mqtt
 import json
 import math
+from game_logic import Logic
 
 SERVER = "127.0.0.1"
 PORT = 1883
 PLAYER_NAME = "foo"
+
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
