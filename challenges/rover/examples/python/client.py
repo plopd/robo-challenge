@@ -31,6 +31,18 @@ def on_message(client, userdata, msg):
 
     # TODO: implement algorithm
 
+def move_forward(dist):
+    pass
+
+def move_backward(dist):
+    pass
+
+def turn_left(angle):
+    pass
+
+def turn_right(angle):
+    pass
+
 
 client = mqtt.Client()
 client.on_connect = on_connect
