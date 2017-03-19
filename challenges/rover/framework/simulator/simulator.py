@@ -8,7 +8,7 @@ MIN_DIST = 0
 MAX_ANGLE = 360
 MIN_ANGLE = 0
 VAR_TRANS = 20
-VAR_ANGLE = 10
+VAR_ANGLE = 20
 
 def gauss_noise(var):
     _sum = 0.0
