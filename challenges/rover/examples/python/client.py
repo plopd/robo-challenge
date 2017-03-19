@@ -3,6 +3,11 @@ import json
 import math
 # from game_logic import Logic
 import time
+from scipy.cluster.vq import kmeans2
+import numpy as np
+import pygame
+
+clustered = False
 
 class Point:
     def __init__(self, x, y):
@@ -15,8 +20,6 @@ class Point:
 
     def to_dict(self):
         return dict(x=self.x, y=self.y)
-
-
 
 class Logic:
     def __init__(self, max_stat_count=5, stat_err=0, fact_step=5):
@@ -37,7 +40,43 @@ class Logic:
         self.y_max = 0
         self.direction = "forward"
         self.turn_angle = 0
-
+        
+        self.tsp_path = []
+        self.touched = None
+    
+    def compute_cluster(self, data, k=2, visual=False):
+        points = []
+        for p in data['points']:
+            if p['collected'] == False and p['score'] > 0:
+                px = p['x'] 
+                py = p['y']
+                pr = p['r']    
+                points.append([float(px),float(py)])
+        _data = np.array(points)
+        cent, var = kmeans2(_data, k)
+        
+        self.centroid = cent
+        self.labels = var        
+        
+        # Visualisation
+        if visual:
+            pygame.init()
+            screen = pygame.display.set_mode([data['world']['x_max'], data['world']['y_max']])
+            screen.fill((255, 255, 255))
+            black = (0,0,0)
+            pygame.draw.circle(screen, black, (data['robot']['x'], data['robot']['y']), data['robot']['r'], 0)
+        
+            blue = (0 , 0 , 255)
+            red = (255, 0 , 0)
+            color = None
+            for i, pt in enumerate(_data):
+                if self.labels[i] == 0:
+                    color = blue
+                else:
+                    color = red
+                pygame.draw.circle(screen, color, (int(pt[0]), int(pt[1])), data['points'][i]['r'], 0)
+            pygame.display.update()
+        
     def update(self, data):
         robo = Point(data['robot']['x'], data['robot']['y'])
         ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] > 0]
@@ -47,8 +86,8 @@ class Logic:
         else:
             stat = True
             self.available = ava
-            self.x_max = data['world']['x_max']-2
-            self.y_max = data['world']['y_max']-2
+            self.x_max = data['world']['x_max'] - 2
+            self.y_max = data['world']['y_max'] - 2
 
         self.robot = robo
 
@@ -133,8 +172,8 @@ class Logic:
 
 
 
-# SERVER = "127.0.0.1"
-SERVER = "10.10.10.30"
+SERVER = "127.0.0.1"
+#SERVER = "10.10.10.30"
 PORT = 1883
 PLAYER_NAME = "RoboHackHustlers"
 
@@ -157,7 +196,7 @@ logic = Logic(4, fact_step=4)
 first = True
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-    global cur, moving, logic, first
+    global cur, moving, logic, first, clustered
     obj = json.loads(msg.payload.decode("utf-8"))
 
     if 'incoming' in msg.topic:
@@ -170,6 +209,9 @@ def on_message(client, userdata, msg):
             #     move_forward(100)
             #     # time.sleep(2)
             #     first = False
+            if not clustered:
+                logic.compute_cluster(obj)
+                clustered = True
             logic.update(obj)
 
 
