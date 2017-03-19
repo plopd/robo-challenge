@@ -5,6 +5,7 @@ import math
 import time
 import random
 
+from tsp_solver.greedy import solve_tsp
 
 class Point:
     def __init__(self, x, y):
@@ -46,20 +47,28 @@ class Logic:
         self.x_max = 0
         self.y_max = 0
         self.direction = "forward"
-        self.turn_angle = 0
-        self.calibration = calibration
-        self.calibration_count = 0
-        self.accumulated_real_angle = 0
-        self.datax = list()
-        self.datay = list()
-
-    def calibration_collection(self, data):
-        robo = Point(data['robot']['x'], data['robot']['y'])
-        ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] > 0]
+        self.tsp_created = False
+        self.tsp_path = None
+        self.tsp_index = 0
 
     def update(self, data):
         robo = Point(data['robot']['x'], data['robot']['y'])
         ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] > 0]
+        if not self.tsp_created:
+            ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] > 0]
+            D = [[0 for i in range(len(ava))] for j in range(len(ava))]
+
+            # connection between start point and all the ava points is 0 for tsp.
+
+            # now add distances between the ava points.
+            for i in range(len(ava)):
+                for j in range(i + 1, len(ava)):
+                    d = Point.dist(ava[i], ava[j])
+                    D[i][j] = D[j][i] = d
+            self.tsp_path = solve_tsp(D)
+            for i in range(len(self.tsp_path)):
+                self.tsp_path[i] = ava[self.tsp_path[i]]
+
 
         prev_angle = self.rob_angle
 
@@ -80,9 +89,11 @@ class Logic:
             self.stat_count = 0
 
         to_move = False
+        found = False
         if len(ava) < len(self.available):
             print("**found")
             to_move = True
+            found = True
         elif self.stat_count >= self.max_stat_count and abs(math.degrees(self.rob_angle-prev_angle)) <= self.min_angle_err:
             print("**stationary")
             to_move = True
@@ -101,7 +112,13 @@ class Logic:
 
         if to_move:
             self.available = ava
-            p = self.find_closest()
+            if not self.tsp_created:
+                p = self.find_closest()
+                self.tsp_created = True
+            else:
+                p = self.tsp_path[self.tsp_index]
+                if found:
+                    self.tsp_index += 1
             # stop()
             # TODO: move a little to find your orientation
             self.move(p)
@@ -191,7 +208,7 @@ cur = dict()
 cur['theta'] = 0
 moving = False
 
-logic = Logic(2, fact_step=3.3, min_angle_err=3)
+logic = Logic(2, fact_step=4, min_angle_err=3)
 first = True
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
