@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import math
 import common
-import numpy as np
+import random as rnd
 
 MAX_DIST = 5000
 MIN_DIST = 0
@@ -13,7 +13,7 @@ VAR_ANGLE = 20
 def gauss_noise(var):
     _sum = 0.0
     for _ in range(12):
-        _sum += np.random.uniform(-var, var)
+        _sum += rnd.uniform(-var, var)
     return 0.5 * _sum
 
 class Simulator:
@@ -64,7 +64,7 @@ class Simulator:
         y = math.sin(math.radians(self.__angle)) * distance / self.POSITION_FACTOR
         self.__x += x
         self.__y += y
-	noisy_distance = distance + gauss_noise(VAR_TRANS)
+        noisy_distance = distance + gauss_noise(VAR_TRANS)
         self.__left_distance += noisy_distance
         self.__right_distance += noisy_distance
 
@@ -81,7 +81,7 @@ class Simulator:
         y = math.sin(math.radians(self.__angle)) * distance / self.POSITION_FACTOR
         self.__x -= x
         self.__y -= y
-	noisy_distance = distance + gauss_noise(VAR_TRANS)
+        noisy_distance = distance + gauss_noise(VAR_TRANS)
         self.__left_distance -= noisy_distance
         self.__right_distance -= noisy_distance
 
