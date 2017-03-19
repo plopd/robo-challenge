@@ -3,6 +3,8 @@ import json
 import math
 # from game_logic import Logic
 import time
+import random
+
 
 class Point:
     def __init__(self, x, y):
@@ -15,11 +17,18 @@ class Point:
 
     def to_dict(self):
         return dict(x=self.x, y=self.y)
+    @staticmethod
+    def get_angle(a,b):
+        d_rot = math.atan2(b.y - a.y, b.x - a.x)
+        d_rot_deg = math.degrees(d_rot) % 360
+        if d_rot_deg > 180:
+            d_rot_deg = -360 + d_rot_deg
+        return d_rot_deg
 
 
 
 class Logic:
-    def __init__(self, max_stat_count=5, stat_err=0, fact_step=5):
+    def __init__(self, max_stat_count=5, min_angle_err=10, stat_err=0, fact_step=5, calibration=False):
         self.available = list()                      # List of all unotuched pos pts
         self.max_stat_count = max_stat_count         # if after max_stat_count the position did nto change, im stationary.
         self.stat_count = max_stat_count             # current_counter for finding stationary
@@ -27,7 +36,8 @@ class Logic:
         self.rob_angle = 0                           # Absolute orientation of robot in radians.
 
         self.stat_err = stat_err                     # tolerance for stationary, if its below this you increment stat_count.
-        self.angle_err = 0                           # if difference target rotation and current rotation is (-eps, eps) then dont turn.
+        self.min_angle_err = min_angle_err
+        self.angle_err = 180                           # if difference target rotation and current rotation is (-eps, eps) then dont turn.
         self.target = None                           # Point as the target where robot wants to move.
         self.target_dist = 0
         self.count_target_update = 0
@@ -37,10 +47,22 @@ class Logic:
         self.y_max = 0
         self.direction = "forward"
         self.turn_angle = 0
+        self.calibration = calibration
+        self.calibration_count = 0
+        self.accumulated_real_angle = 0
+        self.datax = list()
+        self.datay = list()
+
+    def calibration_collection(self, data):
+        robo = Point(data['robot']['x'], data['robot']['y'])
+        ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] > 0]
 
     def update(self, data):
         robo = Point(data['robot']['x'], data['robot']['y'])
         ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] > 0]
+
+        prev_angle = self.rob_angle
+
         if self.robot: #if its not the first update.
             stat = self.stationary(robo)
             self.rob_angle = math.atan2(robo.y - self.robot.y, robo.x - self.robot.x)
@@ -56,11 +78,26 @@ class Logic:
             self.stat_count += 1
         else:
             self.stat_count = 0
-        if (len(ava) < len(self.available)) \
-                or self.stat_count >= self.max_stat_count \
-                or self.on_border() \
-                or (self.count_target_update >= self.max_count_target_update
-                    and Point.dist(self.robot, self.target) > self.target_dist): # found or stopped
+
+        to_move = False
+        if len(ava) < len(self.available):
+            print("**found")
+            to_move = True
+        elif self.stat_count >= self.max_stat_count and abs(math.degrees(self.rob_angle-prev_angle)) <= self.min_angle_err:
+            print("**stationary")
+            to_move = True
+        elif self.on_border():
+            print("**border")
+            to_move = True
+        elif abs(Point.get_angle(self.robot, self.target)) > self.angle_err:
+            print("**angle adjust")
+            to_move = True
+        elif (self.count_target_update >= self.max_count_target_update
+                    and Point.dist(self.robot, self.target) > self.target_dist) :
+            print("**away from target")
+            to_move = True
+
+        if to_move:
             self.available = ava
             p = self.find_closest()
             # stop()
@@ -69,7 +106,10 @@ class Logic:
         elif self.count_target_update >= self.max_count_target_update:
             self.count_target_update = 0
             self.target_dist = Point.dist(self.robot, self.target)
-
+            if self.angle_err >= self.min_angle_err/0.4:
+                self.angle_err = 0.4*self.angle_err
+            else:
+                self.angle_err = self.min_angle_err
 
 
     def stationary(self, p):
@@ -78,12 +118,11 @@ class Logic:
         else:
             return True
 
-
     def move(self, p):
         print("MOVE")
         print("robot", self.robot.x, self.robot.y)
         print("target", p.x, p.y)
-
+        self.angle_err  = 180
         self.target = p
         self.count_target_update = 0
         d_trans = Point.dist(self.robot, p)
@@ -109,7 +148,7 @@ class Logic:
                 d_rot_deg -= 180
 
 
-        turn(int(d_rot_deg), self.angle_err)
+        turn(int(d_rot_deg), 2)
         if self.direction == "backward":
             move_backward(int(d_trans*self.factor_step))
         else:
@@ -133,8 +172,8 @@ class Logic:
 
 
 
-# SERVER = "127.0.0.1"
-SERVER = "10.10.10.30"
+SERVER = "127.0.0.1"
+# SERVER = "10.10.10.30"
 PORT = 1883
 PLAYER_NAME = "RoboHackHustlers"
 
@@ -153,7 +192,7 @@ cur = dict()
 cur['theta'] = 0
 moving = False
 
-logic = Logic(4, fact_step=4)
+logic = Logic(2, fact_step=4, min_angle_err=3)
 first = True
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
@@ -171,6 +210,7 @@ def on_message(client, userdata, msg):
             #     # time.sleep(2)
             #     first = False
             logic.update(obj)
+
 
 
 def move_forward(dist):
