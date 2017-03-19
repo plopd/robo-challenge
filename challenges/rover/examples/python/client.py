@@ -29,10 +29,14 @@ class Logic:
         self.stat_err = stat_err                     # tolerance for stationary, if its below this you increment stat_count.
         self.angle_err = 0                           # if difference target rotation and current rotation is (-eps, eps) then dont turn.
         self.target = None                           # Point as the target where robot wants to move.
+        self.target_dist = 0
+        self.count_target_update = 0
+        self.max_count_target_update = 3
         self.factor_step = fact_step                 # figure it out with initial calibration. If you have a target dist d you multiply it by this factor to make up for the noise in the real robot.
         self.x_max = 0
         self.y_max = 0
         self.direction = "forward"
+        self.turn_angle = 0
 
     def update(self, data):
         robo = Point(data['robot']['x'], data['robot']['y'])
@@ -52,19 +56,19 @@ class Logic:
             self.stat_count += 1
         else:
             self.stat_count = 0
-        if (len(ava) < len(self.available)) or self.stat_count >= self.max_stat_count: # found or stopped
+        if (len(ava) < len(self.available)) \
+                or self.stat_count >= self.max_stat_count \
+                or self.on_border() \
+                or (self.count_target_update >= self.max_count_target_update
+                    and Point.dist(self.robot, self.target) > self.target_dist): # found or stopped
             self.available = ava
             p = self.find_closest()
             # stop()
             # TODO: move a little to find your orientation
             self.move(p)
-        else:
-            self.available = ava
-            if self.on_border():
-                p = self.find_closest()
-                # stop()
-                # TODO: move a little to find your orientation
-                self.move(p)
+        elif self.count_target_update >= self.max_count_target_update:
+            self.count_target_update = 0
+            self.target_dist = Point.dist(self.robot, self.target)
 
 
 
@@ -81,7 +85,9 @@ class Logic:
         print("target", p.x, p.y)
 
         self.target = p
+        self.count_target_update = 0
         d_trans = Point.dist(self.robot, p)
+        self.target_dist = d_trans
         d_rot = math.atan2(p.y - self.robot.y, p.x - self.robot.x) - self.rob_angle
         d_rot_deg = math.degrees(d_rot) % 360
         if d_rot_deg > 180:
@@ -127,8 +133,8 @@ class Logic:
 
 
 
-SERVER = "127.0.0.1"
-# SERVER = "10.10.10.30"
+# SERVER = "127.0.0.1"
+SERVER = "10.10.10.30"
 PORT = 1883
 PLAYER_NAME = "RoboHackHustlers"
 
@@ -147,7 +153,7 @@ cur = dict()
 cur['theta'] = 0
 moving = False
 
-logic = Logic(8, fact_step=8)
+logic = Logic(4, fact_step=4)
 first = True
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
