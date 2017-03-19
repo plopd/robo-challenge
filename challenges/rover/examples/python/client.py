@@ -32,7 +32,7 @@ class Logic:
         self.factor_step = fact_step                 # figure it out with initial calibration. If you have a target dist d you multiply it by this factor to make up for the noise in the real robot.
         self.x_max = 0
         self.y_max = 0
-
+        self.direction = "forward"
 
     def update(self, data):
         robo = Point(data['robot']['x'], data['robot']['y'])
@@ -74,6 +74,7 @@ class Logic:
         else:
             return True
 
+
     def move(self, p):
         print("MOVE")
         print("robot", self.robot.x, self.robot.y)
@@ -87,18 +88,23 @@ class Logic:
             d_rot_deg = -360+d_rot_deg
         print ("initial angle ", d_rot_deg)
         if abs(d_rot_deg) > 90:
-            move_back = True
+            flip = True
         else:
-            move_back = False
+            flip = False
 
-        if move_back:
+        if flip:
+            if self.direction == "forward":
+                self.direction = "backward"
+            else:
+                self.direction = "forward"
             if d_rot_deg < 0:
                 d_rot_deg += 180
             else:
                 d_rot_deg -= 180
 
+
         turn(int(d_rot_deg), self.angle_err)
-        if move_back:
+        if self.direction == "backward":
             move_backward(int(d_trans*self.factor_step))
         else:
             move_forward(int(d_trans*self.factor_step))
