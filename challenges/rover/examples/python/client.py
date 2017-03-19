@@ -4,7 +4,12 @@ import math
 # from game_logic import Logic
 import time
 import random
+import pygame
+from scipy.cluster.vq import kmeans2
+import numpy as np
+from sklearn.cluster import DBSCAN
 
+clustered = False
 
 class Point:
     def __init__(self, x, y):
@@ -52,7 +57,9 @@ class Logic:
         self.accumulated_real_angle = 0
         self.datax = list()
         self.datay = list()
-
+        self.centrod = []
+        self.var = []
+        
     def calibration_collection(self, data):
         robo = Point(data['robot']['x'], data['robot']['y'])
         ava = [Point(p['x'], p['y']) for p in data['points'] if p['collected'] is False and p['score'] > 0]
@@ -109,7 +116,40 @@ class Logic:
             if self.angle_err >= self.min_angle_err/0.4:
                 self.angle_err = 0.4*self.angle_err
             else:
-                self.angle_err = self.min_angle_err
+                self.angle_err = self.min_angle_err    
+    
+    def compute_cluster(self, data, k=2, visual=False):
+        points = []
+        for p in data['points']:
+            if p['collected'] == False and p['score'] > 0:
+                px = p['x'] 
+                py = p['y']
+                pr = p['r']    
+                points.append([float(px),float(py)])
+        _data = np.array(points)
+        cent, var = kmeans2(_data, k)
+        
+        self.centroid = cent
+        self.labels = var        
+        
+        # Visualisation
+        if visual:
+            pygame.init()
+            screen = pygame.display.set_mode([data['world']['x_max'], data['world']['y_max']])
+            screen.fill((255, 255, 255))
+            black = (0,0,0)
+            pygame.draw.circle(screen, black, (data['robot']['x'], data['robot']['y']), data['robot']['r'], 0)
+        
+            blue = (0 , 0 , 255)
+            red = (255, 0 , 0)
+            color = None
+            for i, pt in enumerate(_data):
+                if self.labels[i] == 0:
+                    color = blue
+                else:
+                    color = red
+                pygame.draw.circle(screen, color, (int(pt[0]), int(pt[1])), data['points'][i]['r'], 0)
+            pygame.display.update()
 
 
     def stationary(self, p):
@@ -196,7 +236,7 @@ logic = Logic(2, fact_step=4, min_angle_err=3)
 first = True
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-    global cur, moving, logic, first
+    global cur, moving, logic, first, clustered
     obj = json.loads(msg.payload.decode("utf-8"))
 
     if 'incoming' in msg.topic:
@@ -209,6 +249,9 @@ def on_message(client, userdata, msg):
             #     move_forward(100)
             #     # time.sleep(2)
             #     first = False
+            if not clustered:
+                logic.compute_cluster(obj)
+                clustered = True
             logic.update(obj)
 
 
