@@ -36,22 +36,32 @@ class Robot:
         self.state = "ready" # ready, target, hunt, stop
         self.target_point = None
         self.last_distance_to_goal = 0
-        self.distance_to_goal_threshold = 1
+        self.distance_to_goal_threshold = 0
         self.robot_radius = radius
         self.correction = False
+        self.step_size = 4
+        self.direction = "forward"
+        self.game_state = None
+        self.collected_points_count = 0
 
-    def current_location(self, game_state):
-        return Point(game_state["robot"]["x"], game_state["robot"]["y"])
+    @property
+    def current_location(self):
+        return Point(self.game_state["robot"]["x"], self.game_state["robot"]["y"])
 
-    def on_map(self, game_state):
-        return Point.dist(self.current_location(game_state), Point(game_state["world"]["x_max"], game_state["world"]["x_max"])) > self.robot_radius
 
-    def find_closest(self, game_state):
+    def on_map(self):
+        current_location = self.current_location
+        return abs(current_location.x) > self.robot_radius and abs(current_location.y) > self.robot_radius and \
+        abs(current_location.x-self.game_state["world"]["x_max"]) > self.robot_radius and \
+        abs(current_location.y-self.game_state["world"]["y_max"]) > self.robot_radius
+
+
+    def find_closest(self):
         min_dist = math.inf
         min_point = Point(-1,-1)
-        current_point = self.current_location(game_state)
-        for p in game_state["points"]:
-            if p["collected"] == False:
+        current_point = self.current_location
+        for p in self.game_state["points"]:
+            if p["collected"] == False and p["score"] > 0:
                 point = Point(p["x"], p["y"])
                 d = Point.dist(current_point, point)
                 if d < min_dist:
@@ -59,35 +69,69 @@ class Robot:
                     min_point = point
         return min_point
 
+    def count_current_collected_points(self):
+        ct = 0
+        for p in self.game_state["points"]:
+            if p["collected"] == True and p["score"] > 0:
+                ct += 1
+        return ct
+
     def correct(self, robot_state):
+        print(" ===> CORRECT YOURSELF!")
         self.theta += robot_state["angle"]
 
+    def flip_direction(self):
+        if self.state == 'forward':
+            self.state = 'backwards'
+        else:
+            self.state = 'forward'
+        if self.theta <= 180:
+            self.theta += 180
+        else:
+            self.theta -= 180
+
     def update(self, game_state):
+        # self.last_tracked_point = self.current_location
+        self.game_state = game_state
         if self.state == 'ready':
             # find next point to hunt
-            # might calibrate here, otherwise just switch to target state.
+            # TODO: might calibrate here, otherwise just switch to target state.
             self.state = 'target'
         elif self.state == 'target':
+            print("TARGET MODE")
             # track next point
-            self.target_point = self.find_closest(game_state)
+            self.target_point = self.find_closest()
             self.state = 'hunt'
             correction = False
-            self.go_to(game_state, self.target_point)
+            self.step_size = 5
+            self.go_to(self.target_point)
         elif self.state == 'hunt':
+            print("HUNT MODE")
             # TODO: check if target_point was lost, then need to switch back to target state.
-            current_distance = Point.dist(self.current_location(game_state), self.target_point)
-            if current_distance - self.last_distance_to_goal > self.distance_to_goal_threshold or \
-            not self.on_map(game_state) or \
-            current_distance <= self.robot_radius: # found point
-                # issue stop command and switch to target state.
+            current_distance = Point.dist(self.current_location, self.target_point)
+            print("distance to goal: %d" % current_distance)
+            if current_distance - self.last_distance_to_goal > self.distance_to_goal_threshold:
+                print("DISTANCE TO TARGET INCREASING !!!!!!")
                 stop()
-                correction = True
+                #correction = True
                 self.state = 'target'
+            tmp_cnt = self.count_current_collected_points()
+            if self.collected_points_count < tmp_cnt:
+                stop()
+                self.state = 'target'
+                self.collected_points_count = tmp_cnt
             self.last_distance_to_goal = current_distance
+
+            # check for boundary
+            if not self.on_map(game_state):
+                print("FOUND WALL")
+                # move backwards
+
+
 
     def go_to(self, game_state, target_point):
         current_point = self.current_location(game_state)
-        print("Go from %s to %s" % (current_point.to_string(), self.target_point.to_string()))
+        print("Go from %s to %s" % (current_point.to_string(), target_point.to_string()))
 
         self.state = "hunt"
         self.last_tracked_point = current_point
@@ -95,13 +139,17 @@ class Robot:
         d_rot = math.atan2(target_point.y - current_point.y, target_point.x - current_point.x) - self.theta
 
         d_rot_deg = int(math.degrees(d_rot))
-        d_trans = int(d_trans*8)
-        print("turn %d degrees and drive %d units" % (d_rot_deg, d_trans))
+        d_trans = int(d_trans*self.step_size)
+        print("\tturn %d degrees and drive %d units" % (d_rot_deg, d_trans))
 
         turn(d_rot_deg)
-        move_forward(d_trans)
+        if self.direction == 'forward':
+            move_forward(d_trans)
+        else:
+            move_backward(d_trans)
 
 
+'''
 def calibrate(game_state):
     global current_point, target_dist
     # from current position go to a random sufficiently distant position.
@@ -110,7 +158,7 @@ def calibrate(game_state):
     target_point = Point(1000,400)
     target_dist = Point.dist(current_point, target_point)
     move({'x': current_point.x, 'y': current_point.y, 'theta': 0},{'x': target_point.x, 'y': target_point.y})
-
+'''
 
 
 ###############
@@ -162,8 +210,8 @@ def move_backward(dist):
     client.publish('robot/process', json.dumps({"command": "backward", "args": dist}))
 
 def turn(angle_deg):
-    print("turn by %d degrees %s" % (angle_deg, "left" if angle_deg < 0 else "right"))
-    if angle_deg < 0:
+    print("turn by %d degrees %s" % (angle_deg, "left" if angle_deg > 0 else "right"))
+    if angle_deg > 0:
         client.publish('robot/process', json.dumps({"command": "left", "args": angle_deg}))
     else:
         client.publish('robot/process', json.dumps({"command": "right", "args": angle_deg}))
